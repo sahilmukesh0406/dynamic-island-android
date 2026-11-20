@@ -85,6 +85,13 @@ class IslandOverlay(
         /** Long-press the circle: every running activity in a list. */
         const val STACK_ID = "__stack"
         fun isPanel(id: String?) = id == TOOLS_ID || id == INBOX_ID || id == STACK_ID
+
+        /**
+         * true  = the island sits in the exact horizontal centre of the screen (for phones whose camera
+         *         hole is in a corner, like the OnePlus Nord 2), and its resting dot is invisible.
+         * false = the original behaviour: the island is built around the camera hole.
+         */
+        const val CENTER_ON_SCREEN = true
     }
 
     private val ctx: Context = ContextThemeWrapper(base, R.style.Theme_Island_Overlay)
@@ -296,7 +303,7 @@ class IslandOverlay(
         val maxCam = (sbH * 0.6f).roundToInt()
         val camD = (cut?.let { minOf(it.width(), it.height()) }?.takeIf { it >= dp(5) } ?: (sbH * 0.5f).roundToInt())
             .coerceAtMost(maxCam)
-        val cx = cut?.centerX() ?: (sw / 2)
+        val cx = if (CENTER_ON_SCREEN) sw / 2 else (cut?.centerX() ?: (sw / 2))
         val camCy = if (cut != null && cut.height() <= cut.width() * 1.3f) cut.centerY() else (cut?.let { it.top + camD / 2 } ?: (sbH / 2))
 
         // Resting island = exactly the camera hole (black on black → invisible). Fine-tune with holeAdjust.
@@ -310,7 +317,10 @@ class IslandOverlay(
         // Pop-up width (Settings → Look → Pop-ups): narrow, standard (today's) or wide.
         val expandedW = when (prefs.popupWidth) { 0 -> (sw * 0.84f).roundToInt(); 2 -> sw - dp(6); else -> sw - dp(16) }
         binder.expandedScale = if (prefs.popupLargeText) 1.18f else 1f
-        return Geo(sw, sh, cx, top, idle, idle, camD + dp(10), expandedW, compactH, compactW)
+        // The gap in the middle of the pill exists to leave room for the camera. When the island is centred
+        // on the screen there is no camera under it, so keep only a small spacer between the two sides.
+        val camGap = if (CENTER_ON_SCREEN) dp(8) else camD + dp(10)
+        return Geo(sw, sh, cx, top, idle, idle, camGap, expandedW, compactH, compactW)
     }
 
     // ------------------------------------------------------------------ state machine
@@ -420,6 +430,8 @@ class IslandOverlay(
                 privacyDot.isVisible = privacy
                 setBubble(null)
                 applyLook(null, idle = true)
+                // Centred on the screen there is no camera hole to hide in, so a black dot would show: make the resting dot invisible.
+                if (CENTER_ON_SCREEN && !privacy && !prefs.calibrate) pillBg.setColor(Color.TRANSPARENT)
                 // Grows out of the camera hole only when there's a camera/mic dot to show.
                 if (privacy) animateTo(g.compactH * 2, g.compactH, pillRadius(g.compactH))
                 else animateTo(g.idleW, g.idleH, g.idleH / 2f)
